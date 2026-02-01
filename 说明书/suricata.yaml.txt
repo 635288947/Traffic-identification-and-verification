@@ -1,0 +1,134 @@
+# ===================== 基础配置 =====================
+# 程序需要读取的日志输出目录（与Python程序中SURICATA_LOG_PATH对应）
+default-log-dir: /var/log/suricata
+# Suricata运行用户（Ubuntu建议用suricata用户）
+user: suricata
+group: suricata
+
+# ===================== 流量捕获配置 =====================
+# 监听的网卡（根据服务器实际网卡修改，如eth0、ens33）
+af-packet:
+  - interface: eth0
+    # 性能优化（单网卡场景）
+    threads: 1
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+    use-mmap: yes
+
+# 备用：如果af-packet不生效，可使用pcap模式
+# pcap:
+#   - interface: eth0
+#     snaplen: 1514
+#     promisc: yes
+
+# ===================== 规则加载配置 =====================
+# 规则文件路径（确保包含告警规则，生成有SID的告警）
+rule-files:
+  - /etc/suricata/rules/default.rules
+  - /etc/suricata/rules/local.rules
+
+# ===================== 协议解析配置（程序提取HTTP字段依赖） =====================
+app-layer:
+  protocols:
+    # 启用HTTP解析（提取uri/method/user-agent必须）
+    http:
+      enabled: yes
+      # 解析HTTP请求/响应的所有字段
+      request-body-limit: 100kb
+      response-body-limit: 100kb
+      # 启用HTTP日志字段（程序需要的uri/method/status都在这里）
+      logging:
+        enabled: yes
+        # 记录所有HTTP字段
+        custom:
+          - http.method
+          - http.uri
+          - http.http_user_agent
+          - http.status_code
+    # 可选：启用DNS解析（如需提取DNS日志可保留）
+    dns:
+      enabled: yes
+      logging: yes
+    # 启用TCP/UDP解析
+    tcp:
+      enabled: yes
+      # 流重组（确保完整解析TCP流量）
+      stream:
+        enabled: yes
+        reassembly:
+          enabled: yes
+    udp:
+      enabled: yes
+
+# ===================== 日志输出配置（核心：适配程序提取JSON日志） =====================
+outputs:
+  # 启用EVE JSON日志（程序唯一依赖的日志格式）
+  - eve-log:
+      enabled: yes
+      # 日志文件路径（与Python程序中SURICATA_LOG_PATH一致）
+      filename: eve.json
+      # 文件类型：普通文件（便于程序读取）
+      filetype: regular
+      # 轮转配置（防止日志过大）
+      rotate:
+        size: 100MB
+        files: 10
+      # 启用程序需要的所有日志字段
+      types:
+        # 告警日志（必须，程序提取sid/message/category）
+        - alert:
+            # 包含完整告警信息
+            metadata: yes
+            # 包含规则SID（程序提取vulID）
+            signature-id: yes
+            # 包含告警类别（程序映射vulType）
+            category: yes
+        # HTTP日志（必须，程序提取uri/method/user-agent）
+        - http:
+            # 包含所有HTTP字段
+            extended: yes
+        # 基础流量信息（包含dest_ip/dest_port）
+        - netflow:
+            enabled: yes
+            fields:
+              - src_ip
+              - dest_ip
+              - src_port
+              - dest_port
+              - proto
+        # 可选：启用其他日志（如需扩展可保留）
+        - dns: yes
+        - tcp: yes
+
+  # 禁用其他日志（减少冗余，程序不需要）
+  - fast-log:
+      enabled: no
+  - full-log:
+      enabled: no
+  - http-log:
+      enabled: no
+  - dns-log:
+      enabled: no
+
+# ===================== 检测引擎配置 =====================
+detect:
+  # 启用规则检测（必须，否则无告警日志）
+  enabled: yes
+  # 单线程（确保第一条告警日志优先输出）
+  threads: 1
+  # 规则匹配深度（确保匹配HTTP payload）
+  inspection-depth: 1000
+
+# ===================== 其他优化配置 =====================
+# 禁用无关功能（减少资源占用）
+stats:
+  enabled: yes
+  # 统计信息输出间隔（不影响程序）
+  interval: 60s
+# 禁用HTTPS解密（如需分析HTTPS需配置SSL证书，基础场景禁用）
+tls:
+  enabled: no
+# 禁用文件提取（程序不需要）
+file-extraction:
+  enabled: no

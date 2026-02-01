@@ -1,0 +1,15 @@
+[*] Starting pocsuite3 ...
+[*] Pocsuite3 version: 1.9.6
+[*] Target: http://127.0.0.1:80
+[+] [SuricataAutoPOC] Verify success
+[+] Verify result:
+{
+    "VerifyInfo": {
+        "HTTP_Method": "GET",
+        "Payload": "/malicious.php",
+        "Response_Content": "<html>...</html>",
+        "Response_Status": 200,
+        "URL": "http://127.0.0.1/malicious.php"
+    }
+}
+[*] Pocsuite3 finished successfully
